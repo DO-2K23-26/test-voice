@@ -1,4 +1,4 @@
-import { SetStateAction, useState} from 'react'
+import {SetStateAction, useEffect, useState} from 'react'
 import './App.css'
 
 function App() {
@@ -9,16 +9,13 @@ function App() {
   const [micDisabled, setMicDisabled] = useState(true)
   const [iceStatus, setIceStatus] = useState('Waiting')
   const [chanStatus, setChanStatus] = useState('Click Join Button...')
-  //TODO implement media from this state instead of byId which is not working for now
-  const [media, setMedia] = useState([])
+  const [media, setMedia] = useState([ document.createElement('video')])
   const [session, setSession] = useState(Math.floor(Math.random() * 1000000000))
-  // const [callback, setCallback] = useState(() => {})
+  const [callback, setCallback] = useState( () => (value) => {})
   const [rtc, setRtc] = useState(new RTCPeerConnection())
 
   const endpoint = "https://172.22.0.1:8080"
   const byId = (id) => document.getElementById(id);
-  const byTag = (tag) => [].slice.call(document.getElementsByTagName(tag));
-  let callback = null;
 
   //TODO impplement all off this variable in states
   const endpointId = Math.floor(Math.random() * 1000000000);
@@ -42,13 +39,64 @@ function App() {
     }
   };
 
+  rtc.ontrack = (e) => {
+    console.log('ontrack', e.track);
+    const track = e.track;
+    const domId = `media-${track.id}`;
+    const el = document.createElement('video');
+    if (byId(domId)) {
+      // we aleady have this track
+      return;
+    }
+    el.id = domId;
+    el.width = 500;
+    el.controls = true;
+    el.autoplay = true;
+    setTimeout(() => {
+      const new_media = new MediaStream();
+      new_media.addTrack(track);
+      el.srcObject = new_media;
+    }, 1);
+    media.push(el)
+    setMedia(media)
+    track.addEventListener('mute', () => {
+      console.log('track muted', track);
+      setMedia(media.filter((element) => element !== el))
+    });
+    track.addEventListener('unmute', () => {
+      console.log('track unmuted', track);
+      media.push(el)
+      setMedia(media)
+    });
+  };
+
+  useEffect(() => {
+    console.log("RTC :", rtc)
+  } ,[rtc])
+
+  // useEffect(() => {
+  //   console.log("CALLBACK :", callback)
+  // } ,[callback])
+
   async function negotiate() {
     const offer = await rtc.createOffer();
     console.log('do offer', offer.sdp.split('\r\n'));
     await rtc.setLocalDescription(offer);
     dataChannel.send(JSON.stringify(offer));
     const json = await new Promise((rs) => {
-      callback = rs;
+      // callback = rs;
+      dataChannel.onmessage = (event) => {
+        console.log('onmessage', event.data)
+        const json = JSON.parse(event.data);
+        if (json.type == 'offer') {
+          // no callback probably means it's an offer
+          handleOffer(event.data);
+        } else if (json.type == 'answer') {
+          rs(event.data)
+        }
+      };
+      setCallback(() => rs)
+      // console.log(rs)
       console.log('callback', callback);
     });
     console.log('received answer', json);
@@ -84,7 +132,7 @@ function App() {
         height: 360,
       },
     });
-    const tr = rtc.addTransceiver(streamCam.getTracks()[0], {
+    rtc.addTransceiver(streamCam.getTracks()[0], {
       direction: "sendonly",
       streams: [streamCam],
       // This table shows the valid values for simulcast.
@@ -126,35 +174,6 @@ function App() {
     await negotiate();
   }
 
-  rtc.ontrack = (e) => {
-    console.log('ontrack', e.track);
-    const track = e.track;
-    const domId = `media-${track.id}`;
-    const el = document.createElement('video');
-    if (byId(domId)) {
-      // we aleady have this track
-      return;
-    }
-    el.id = domId;
-    el.width = 500;
-    byId('media').appendChild(el);
-    el.controls = true;
-    el.autoplay = true;
-    setTimeout(() => {
-      const media = new MediaStream();
-      media.addTrack(track);
-      el.srcObject = media;
-    }, 1);
-    track.addEventListener('mute', () => {
-      console.log('track muted', track);
-      el.parentNode.removeChild(el);
-    });
-    track.addEventListener('unmute', () => {
-      console.log('track unmuted', track);
-      byId('media').appendChild(el);
-    });
-  };
-
   async function startRtc() {
     const path = endpoint + '/offer/' + session + '/' + endpointId;
     setIceStatus('Connecting')
@@ -163,7 +182,7 @@ function App() {
     setJoinDisabled(true)
     setLeaveDisabled(false)
     console.log('dataChannel');
-    const channel = rtc.createDataChannel("offer/answer");
+    const channel = rtc.createDataChannel("offer/answer")
     channel.onmessage = (event) => {
       console.log('onmessage', event.data)
       const json = JSON.parse(event.data);
@@ -171,9 +190,11 @@ function App() {
         // no callback probably means it's an offer
         handleOffer(event.data);
       } else if (json.type == 'answer') {
+
+        setCallback(() => callback(event.data))
+        console.log(channel)
         console.log('answer', callback);
         callback(event.data);
-        callback = null;
       }
     };
     channel.onopen = () => {
@@ -194,6 +215,7 @@ function App() {
     console.log('POST offer response', res)
     const answer = await res.json();
     await rtc.setRemoteDescription(answer);
+    console.log('RTC JOIN:', rtc)
     console.log('POST answer', answer.sdp.split('\r\n'));
   }
 
@@ -206,11 +228,10 @@ function App() {
     rtc.close();
 
     const path = endpoint + '/leave/' + session + '/' + endpointId;
-    const res = await fetch(path, {
+    await fetch(path, {
       method: 'POST',
       mode: 'cors',
     });
-
     setRtc(new RTCPeerConnection())
   }
 
@@ -228,9 +249,10 @@ function App() {
       Status: <span id="ice_status">{iceStatus}</span>
       <div id="chan_status">{chanStatus}</div>
       <div id="media">
-        {/*{media.map((m) => {*/}
-        {/*  return <video key={m.id} id={'media-' + m.id} width="500" controls autoPlay></video>*/}
-        {/*})}*/}
+        {media.map((m) => {
+          //TODO fix video display
+          return <video key={m.id} id={'media-' + m.id} src={m.src} width={m.width} controls={m.controls} autoPlay={m.autoplay}></video>
+        })}
       </div>
     </>
   )
