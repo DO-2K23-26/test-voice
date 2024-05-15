@@ -1,5 +1,10 @@
-import {SetStateAction, useEffect, useState} from 'react'
+import {SetStateAction, useCallback, useEffect, useRef, useState} from 'react'
 import './App.css'
+import {Simulate} from "react-dom/test-utils";
+import waiting = Simulate.waiting;
+
+type element = {id: string, width: number, controls: boolean, autoplay: boolean, srcObject: MediaStream}
+
 
 function App() {
   const [sessionDisabled, setSessionDisabled] = useState(false)
@@ -9,94 +14,127 @@ function App() {
   const [micDisabled, setMicDisabled] = useState(true)
   const [iceStatus, setIceStatus] = useState('Waiting')
   const [chanStatus, setChanStatus] = useState('Click Join Button...')
-  const [media, setMedia] = useState([ document.createElement('video')])
+  const [media, setMedia] = useState(new Array<element>())
   const [session, setSession] = useState(Math.floor(Math.random() * 1000000000))
   const [callback, setCallback] = useState( () => (value) => {})
   const [rtc, setRtc] = useState(new RTCPeerConnection())
+  const [dataChannel, setDataChannel] = useState(new RTCPeerConnection().createDataChannel("caca"))
+  const dataChannelRef = useRef(dataChannel)
+  const rtcRef = useRef(rtc)
+  const messageCallback = useCallback((event: MessageEvent) => {
+    console.log('onmessage', event.data)
+    const json = JSON.parse(event.data);
+    if (json.type == 'offer') {
+      // no callback probably means it's an offer
+      handleOffer(event.data);
+    } else if (json.type == 'answer') {
+      setCallback(() => callback(event.data))
+      console.log('answer', callback);
+      callback(event.data);
+    }
+  }, [callback, dataChannel])
 
-  const endpoint = "https://172.22.0.1:8080"
-  const byId = (id) => document.getElementById(id);
-
-  //TODO impplement all off this variable in states
-  const endpointId = Math.floor(Math.random() * 1000000000);
-  let streamCam: MediaStream;
-  let streamMic: MediaStream;
-  const [dataChannel, setDataChannel] = useState(new RTCPeerConnection().createDataChannel("offer/answer"))
-  rtc.oniceconnectionstatechange = () => {
-    setIceStatus(rtc.iceConnectionState)
-    if (rtc.iceConnectionState == 'disconnected' || rtc.iceConnectionState == 'failed') {
+  const onIceConnectionStateChangeCallback = useCallback(() => {
+    setIceStatus(rtcRef.current.iceConnectionState)
+    if (rtcRef.current.iceConnectionState == 'disconnected' || rtcRef.current.iceConnectionState == 'failed') {
       if (streamCam) {
         streamCam.getTracks()[0]?.stop();
       }
       if (streamMic) {
         streamMic.getTracks()[0]?.stop();
       }
-      rtc.close();
+      rtcRef.current.close();
       setJoinDisabled(true)
       setLeaveDisabled(true)
       setCamDisabled(true)
       setMicDisabled(true)
     }
-  };
+  }, [setIceStatus, rtc, setJoinDisabled, setLeaveDisabled, setCamDisabled, setMicDisabled, rtcRef])
 
-  rtc.ontrack = (e) => {
+  const onOpenCallback = useCallback(() => {
+    setChanStatus('Joined session ' + session + ' as endpoint ' + endpointId)
+    setMicDisabled(false)
+    setCamDisabled(false)
+    console.log('onOpenCallback', onOpenCallback)
+  }, [setChanStatus, setMicDisabled, setMicDisabled])
+
+  const onTrackCallback = useCallback((e) => {
     console.log('ontrack', e.track);
-    const track = e.track;
-    const domId = `media-${track.id}`;
-    const el = document.createElement('video');
-    if (byId(domId)) {
-      // we aleady have this track
-      return;
+    const element: element = {
+      id: '',
+      width: 0,
+      controls: false,
+      autoplay: false,
+      srcObject: new MediaStream(),
     }
-    el.id = domId;
-    el.width = 500;
-    el.controls = true;
-    el.autoplay = true;
+    const track = e.track
+    element.id = track.id
+    // if (byId(domId)) {
+    //   // we aleady have this track
+    //   return;
+    // }
+    element.width = 500
+    element.controls = true
+    element.autoplay = true
     setTimeout(() => {
       const new_media = new MediaStream();
       new_media.addTrack(track);
-      el.srcObject = new_media;
+      element.srcObject = new_media
     }, 1);
-    media.push(el)
+    if (!media.find((value)=>value.id === element.id)){
+      console.log("ADD MEDIA", element.id)
+      media.push(element)
+    }
     setMedia(media)
     track.addEventListener('mute', () => {
       console.log('track muted', track);
-      setMedia(media.filter((element) => element !== el))
+      setMedia(media.filter((value)=>value.id === element.id))
     });
     track.addEventListener('unmute', () => {
       console.log('track unmuted', track);
-      media.push(el)
+      if (!media.find((value)=>value.id === element.id)){
+        console.log("ADD MEDIA", element.id)
+        media.push(element)
+      } else {
+        setMedia(media.filter((value)=>value.id === element.id))
+      }
       setMedia(media)
     });
-  };
+  }, [media, setMedia])
+  const endpoint = "https://172.22.0.1:8080"
+
+  //TODO impplement all off this variable in states
+  const endpointId = Math.floor(Math.random() * 1000000000);
+  let streamCam: MediaStream;
+  let streamMic: MediaStream;
+  rtc.oniceconnectionstatechange = onIceConnectionStateChangeCallback
+
+  rtc.ontrack = onTrackCallback
 
   useEffect(() => {
+    rtcRef.current = rtc;
     console.log("RTC :", rtc)
   } ,[rtc])
 
-  // useEffect(() => {
-  //   console.log("CALLBACK :", callback)
-  // } ,[callback])
+  useEffect(() => {
+    dataChannelRef.current = dataChannel;
+    console.log("DATACHANNEL CHANGE :", dataChannel)
+  } ,[dataChannel])
+
+  useEffect(() => {
+    for (const element of media){
+      document.getElementById(element.id).srcObject = element.srcObject
+    }
+  }, [media])
 
   async function negotiate() {
-    const offer = await rtc.createOffer();
+    const offer = await rtcRef.current.createOffer();
     console.log('do offer', offer.sdp.split('\r\n'));
     await rtc.setLocalDescription(offer);
+    rtcRef.current = rtc
     dataChannel.send(JSON.stringify(offer));
     const json = await new Promise((rs) => {
-      // callback = rs;
-      dataChannel.onmessage = (event) => {
-        console.log('onmessage', event.data)
-        const json = JSON.parse(event.data);
-        if (json.type == 'offer') {
-          // no callback probably means it's an offer
-          handleOffer(event.data);
-        } else if (json.type == 'answer') {
-          rs(event.data)
-        }
-      };
       setCallback(() => rs)
-      // console.log(rs)
       console.log('callback', callback);
     });
     console.log('received answer', json);
@@ -104,6 +142,7 @@ function App() {
     console.log('received answer', answer.sdp.split('\r\n'));
     try {
       await rtc.setRemoteDescription(answer);
+      rtcRef.current = rtc;
     } catch (error) {
       console.log('rtc.setRemoteDescription(answer) with error: ', error);
     }
@@ -114,13 +153,15 @@ function App() {
     console.log('handle offer', offer.sdp.split('\r\n'));
     try {
       await rtc.setRemoteDescription(offer);
+      rtcRef.current = rtc;
     } catch (error) {
       console.log('rtc.setRemoteDescription(offer) with error: ', error);
     }
     const answer = await rtc.createAnswer();
     console.log('offer response', answer.sdp.split('\r\n'));
     await rtc.setLocalDescription(answer);
-    dataChannel.send(JSON.stringify(answer));
+    rtcRef.current = rtc;
+    dataChannelRef.current.send(JSON.stringify(answer));
   }
 
   async function startCam() {
@@ -158,19 +199,20 @@ function App() {
       //     { rid: "l", maxBitrate: 150 * 1024 }
       // ]
     });
+    rtcRef.current = rtc;
     await negotiate();
   }
 
   async function startMic() {
     setMicDisabled(true)
-    console.log(dataChannel)
     streamMic = await navigator.mediaDevices.getUserMedia({
       audio: true,
     });
-    const tr = rtc.addTransceiver(streamMic.getTracks()[0], {
+    rtc.addTransceiver(streamMic.getTracks()[0], {
       streams: [streamMic],
       direction: "sendonly"
     });
+    rtcRef.current = rtc;
     await negotiate();
   }
 
@@ -181,28 +223,10 @@ function App() {
     setSessionDisabled(true)
     setJoinDisabled(true)
     setLeaveDisabled(false)
-    console.log('dataChannel');
     const channel = rtc.createDataChannel("offer/answer")
-    channel.onmessage = (event) => {
-      console.log('onmessage', event.data)
-      const json = JSON.parse(event.data);
-      if (json.type == 'offer') {
-        // no callback probably means it's an offer
-        handleOffer(event.data);
-      } else if (json.type == 'answer') {
-
-        setCallback(() => callback(event.data))
-        console.log(channel)
-        console.log('answer', callback);
-        callback(event.data);
-      }
-    };
-    channel.onopen = () => {
-      setChanStatus('Joined session ' + session + ' as endpoint ' + endpointId)
-      setMicDisabled(false)
-      setCamDisabled(false)
-    };
-    setDataChannel(channel);
+    channel.onmessage = messageCallback
+    channel.onopen = onOpenCallback
+    setDataChannel(channel)
     const offer = await rtc.createOffer();
     await rtc.setLocalDescription(offer);
     console.log('POST offer', offer.sdp.split('\r\n'));
@@ -215,8 +239,11 @@ function App() {
     console.log('POST offer response', res)
     const answer = await res.json();
     await rtc.setRemoteDescription(answer);
+    rtcRef.current= rtc
+    setRtc(rtc)
     console.log('RTC JOIN:', rtc)
     console.log('POST answer', answer.sdp.split('\r\n'));
+    console.log("FINAL CHANNEL:", dataChannelRef);
   }
 
   async function leaveRtc() {
@@ -242,16 +269,16 @@ function App() {
           setSession(event.currentTarget.valueAsNumber)
         }}></input>
       </label>
-      <button id="join" onClick={() => {startRtc()}} disabled={joinDisabled}>Join</button>
-      <button id="leave" onClick={() => {leaveRtc()}} disabled={leaveDisabled}>Leave</button>
-      <button id="cam" onClick={() => {startCam()}} disabled={camDisabled}>Cam</button>
-      <button id="mic" onClick={() => {startMic()}} disabled={micDisabled}>Mic</button>
+      <button id="join" onClick={startRtc} disabled={joinDisabled}>Join</button>
+      <button id="leave" onClick={leaveRtc} disabled={leaveDisabled}>Leave</button>
+      <button id="cam" onClick={startCam} disabled={camDisabled}>Cam</button>
+      <button id="mic" onClick={startMic} disabled={micDisabled}>Mic</button>
       Status: <span id="ice_status">{iceStatus}</span>
       <div id="chan_status">{chanStatus}</div>
       <div id="media">
-        {media.map((m) => {
-          //TODO fix video display
-          return <video key={m.id} id={'media-' + m.id} src={m.src} width={m.width} controls={m.controls} autoPlay={m.autoplay}></video>
+        {media.map((value,index) => {
+          console.log("la video",value.srcObject)
+          return <video key={index} id={value.id} src={value.srcObject} autoPlay={value.autoplay} controls={value.controls} />
         })}
       </div>
     </>
