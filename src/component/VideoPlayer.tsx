@@ -1,18 +1,20 @@
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
+import {element} from "../App.tsx";
 
-export const VideoPlayer: React.FC<{ stream?: MediaStream }> = ({ stream }) => {
-    const videoRef = useRef<HTMLVideoElement>(null);
+export const VideoPlayer: React.FC<{ props: element }> = ({ props }) => {
+    const videoRef = useRef<HTMLVideoElement>(document.createElement("video"));
 
     useEffect(() => {
-        if (videoRef.current && stream) videoRef.current.srcObject = stream;
-    }, [stream]);
+        console.log('videoooooo',videoRef.current && props.srcObject);
+        videoRef.current.srcObject = props.srcObject;
+    }, [props.srcObject]);
     return (
         <video
-            data-testid="peer-video"
-            style={{ width: "100%" }}
+            id={props.id}
+            style={{ width: props.width }}
             ref={videoRef}
-            autoPlay
-            muted={true}
+            autoPlay={props.autoplay}
+            controls={props.controls}
         />
     );
 };

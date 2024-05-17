@@ -2,10 +2,15 @@ import {useCallback, useEffect, useRef, useState} from 'react'
 import './App.css'
 import {VideoPlayer} from "./component/VideoPlayer.tsx";
 
-type element = {id: string, width: number, controls: boolean, autoplay: boolean, srcObject: MediaStream}
+export type element = {id: string, width: number, controls: boolean, autoplay: boolean, srcObject: MediaStream}
 
 const endpointId = Math.floor(Math.random() * 1000000000);
-const endpoint = "https://172.17.0.2:8080"
+const endpoint = "https://127.0.0.1:8080"
+const iceConfig = {
+  'iceServers': [
+    { 'urls': 'stun:127.0.0.1:3478' },
+  ]
+};
 
 function App() {
   const pc = useRef(new RTCPeerConnection());
@@ -13,6 +18,7 @@ function App() {
   const [session, setSession]= useState(102314233)
   const streamCam = useRef(new MediaStream());
   const streamMic = useRef(new MediaStream());
+  const medias = useRef(new Array<element>());
 
   const [sessionDisabled, setSessionDisabled] = useState(false)
   const [joinDisabled, setJoinDisabled] = useState(false)
@@ -21,9 +27,13 @@ function App() {
   const [micDisabled, setMicDisabled] = useState(true)
   const [iceStatus, setIceStatus] = useState('Waiting')
   const [chanStatus, setChanStatus] = useState('Click Join Button...')
-  const [media, setMedia] = useState(new Array<element>())
   const [callback, setCallback] = useState( () => (value) => {})
+  const [media, setMedia] = useState(new Array<element>());
 
+  useEffect(() => {
+    console.log(medias.current)
+    setMedia(medias.current)
+  }, [medias.current.length])
 
   const messageCallback = useCallback((event: MessageEvent) => {
     const json = JSON.parse(event.data);
@@ -37,11 +47,7 @@ function App() {
   }, [callback])
 
 
-  useEffect(() => {
-
-  }, []);
-
-  const onIceConnectionStateChangeCallback = useCallback(() => {
+  const onIceConnectionStateChangeCallback = () => {
     setIceStatus(pc.current.iceConnectionState)
     if (pc.current.iceConnectionState == 'disconnected' || pc.current.iceConnectionState == 'failed') {
       console.log('state changed:', pc.current.iceConnectionState)
@@ -57,16 +63,16 @@ function App() {
       setCamDisabled(true)
       setMicDisabled(true)
     }
-  }, [setIceStatus, setJoinDisabled, setLeaveDisabled, setCamDisabled, setMicDisabled])
+  }
 
-  const onOpenCallback = useCallback(() => {
+  const onOpenCallback = () => {
     setChanStatus('Joined session ' + session + ' as endpoint ' + endpointId)
     setMicDisabled(false)
     setCamDisabled(false)
     console.log('onOpenCallback', onOpenCallback)
-  }, [setChanStatus, setMicDisabled, setMicDisabled])
+  }
 
-  const onTrackCallback = useCallback((e) => {
+  const onTrackCallback = (e: { track: any; }) => {
     console.log('ontrack', e.track);
     const element: element = {
       id: '',
@@ -89,43 +95,40 @@ function App() {
       new_media.addTrack(track);
       element.srcObject = new_media
     }, 1);
-    if (!media.find((value)=>value.id === element.id)){
-      console.log("ADD MEDIA", element.id)
-      media.push(element)
-    }
-    setMedia(media)
+    // if (!medias.current.find((value)=>value.id === element.id)){
+    //   console.log("ADD MEDIA", element.id)
+    //   medias.current.push(element)
+    //   setMedia(medias.current)
+    // }
     track.addEventListener('mute', () => {
-      console.log('track muted', track);
-      setMedia(media.filter((value)=>value.id === element.id))
-    });
+      console.log('track muted', element);
+      medias.current = medias.current.filter((value)=>value.id === element.id)
+      setMedia(medias.current)
+    })
     track.addEventListener('unmute', () => {
-      console.log('track unmuted', track);
-      if (!media.find((value)=>value.id === element.id)){
-        console.log("ADD MEDIA", element.id)
-        media.push(element)
-      } else {
-        setMedia(media.filter((value)=>value.id === element.id))
-      }
-      setMedia(media)
+      console.log('track unmuted', element);
+      medias.current.push(element)
+      setMedia(medias.current)
     });
-  }, [media, setMedia])
+  }
 
 
   async function negotiate() {
-    const offer = await pc.current.createOffer();
-    console.log('do offer', offer.sdp.split('\r\n'));
-    await pc.current.setLocalDescription(offer);
-    offerChannel.current.send(JSON.stringify(offer));
-    const json = await new Promise((rs) => {
-      setCallback(() => rs)
-    });
-    const answer = JSON.parse(json);
-    console.log('received answer', answer.sdp.split('\r\n'));
-    try {
-      await pc.current.setRemoteDescription(answer);
-    } catch (error) {
-      console.log('rtc.setRemoteDescription(answer) with error: ', error);
-    }
+    pc.current.createOffer().then( async (offer) => {
+      console.log('do offer', JSON.stringify(offer));
+      await pc.current.setLocalDescription(offer);
+      offerChannel.current.send(JSON.stringify(offer));
+      const json = await new Promise((rs) => {
+        setCallback(() => rs)
+      });
+      const answer = JSON.parse(json);
+      console.log('received answer', answer.sdp.split('\r\n'));
+      try {
+        await pc.current.setRemoteDescription(answer);
+      } catch (error) {
+        console.log('rtc.setRemoteDescription(answer) with error: ', error);
+      }
+    })
   }
 
   async function handleOffer(json) {
@@ -137,7 +140,7 @@ function App() {
       console.log('rtc.setRemoteDescription(offer) with error: ', error);
     }
     const answer = await pc.current.createAnswer();
-    console.log('offer response', answer.sdp.split('\r\n'));
+    console.log('offer response', JSON.stringify(answer));
     await pc.current.setLocalDescription(answer);
     offerChannel.current.send(JSON.stringify(answer));
   }
@@ -151,7 +154,7 @@ function App() {
         height: 360,
       },
     });
-    media.push({id: streamCam.current.id, width: 640, controls: true, autoplay: true, srcObject: streamCam.current });
+    // medias.current.push({id: streamCam.current.id, width: 640, controls: true, autoplay: true, srcObject: streamCam.current });
     pc.current.addTransceiver(streamCam.current.getTracks()[0], {
       direction: "sendonly",
       streams: [streamCam.current],
@@ -198,6 +201,7 @@ function App() {
     pc.current = new RTCPeerConnection();
     pc.current.oniceconnectionstatechange = onIceConnectionStateChangeCallback
     pc.current.ontrack = onTrackCallback
+    pc.current.onsignalingstatechange = (state) => {console.log(pc.current.signalingState)}
     offerChannel.current = pc.current.createDataChannel("offer/answer")
     offerChannel.current.onmessage = messageCallback
     offerChannel.current.onopen = onOpenCallback
@@ -253,7 +257,7 @@ function App() {
       <div id="media">
         {media.map((value,index) => {
           console.log("la video",value.srcObject)
-          return <VideoPlayer key={index} stream={value.srcObject} />
+          return <VideoPlayer key={index} props={value} />
         })}
       </div>
     </>
