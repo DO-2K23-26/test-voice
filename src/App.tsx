@@ -1,25 +1,20 @@
-import {useCallback, useEffect, useRef, useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import './App.css'
 import {VideoPlayer} from "./component/VideoPlayer.tsx";
 
 export type element = {id: string, width: number, controls: boolean, autoplay: boolean, srcObject: MediaStream}
 
 const endpointId = Math.floor(Math.random() * 1000000000);
-const endpoint = "https://127.0.0.1:8080"
-const iceConfig = {
-  'iceServers': [
-    { 'urls': 'stun:127.0.0.1:3478' },
-  ]
-};
 
 function App() {
+  const endpoint = import.meta.env.VITE_API_ENDPOINT
   const pc = useRef(new RTCPeerConnection());
   const offerChannel = useRef(new RTCPeerConnection().createDataChannel("caca"));
   const [session, setSession]= useState(102314233)
   const streamCam = useRef(new MediaStream());
   const streamMic = useRef(new MediaStream());
   const medias = useRef(new Array<element>());
-  const callbackRef = useRef((value) => {});
+const callbackRef = useRef((value: any) => {console.log(value)});
 
   const [sessionDisabled, setSessionDisabled] = useState(false)
   const [joinDisabled, setJoinDisabled] = useState(false)
@@ -42,7 +37,7 @@ function App() {
       handleOffer(event.data);
     } else if (json.type == 'answer') {
       callbackRef.current(event.data)
-      callbackRef.current = (value) => {}
+      callbackRef.current = (value: any) => {console.log(value)}
     }
   }
 
@@ -147,7 +142,7 @@ function App() {
       offerChannel.current.send(JSON.stringify(offer));
       const json = await new Promise((rs) => {
         callbackRef.current = rs
-      });
+      }) as string;
       const answer = JSON.parse(json);
       console.log('received answer', answer.sdp.split('\r\n'));
       try {
@@ -158,7 +153,7 @@ function App() {
     })
   }
 
-  async function handleOffer(json) {
+  async function handleOffer(json: string) {
     const offer = JSON.parse(json);
     console.log('handle offer', offer.sdp.split('\r\n'));
     try {
@@ -228,7 +223,7 @@ function App() {
     pc.current = new RTCPeerConnection();
     pc.current.oniceconnectionstatechange = onIceConnectionStateChangeCallback
     pc.current.ontrack = onTrackCallback
-    pc.current.onsignalingstatechange = (state) => {console.log(pc.current.signalingState)}
+    pc.current.onsignalingstatechange = () => {console.log(pc.current.signalingState)}
     offerChannel.current = pc.current.createDataChannel("offer/answer")
     offerChannel.current.onmessage = messageCallback
     offerChannel.current.onopen = onOpenCallback

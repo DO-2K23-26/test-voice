@@ -1,0 +1,6 @@
+apiVersion: v2
+name: test-voice
+description: the frontend the voice test
+type: application
+version: 0.0.0
+appVersion: "1.0.0"

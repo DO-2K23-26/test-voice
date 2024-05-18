@@ -1,0 +1,21 @@
+replicaCount: 1
+imagePullSecrets:
+  - name: beep-registry
+image:
+  repository: gitlab.polytech.umontpellier.fr:5050/beep/front/test-voice
+  pullPolicy: Always
+  tag: latest
+  port: 80
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  annotations: { traefik.ingress.kubernetes.io/router.entrypoints: web}
+  hosts:
+    - host: visio.duratm.com
+      paths: ['/']
+
+resources: {}
