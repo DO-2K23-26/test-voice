@@ -131,7 +131,7 @@ function App() {
     }, 1);
     track.addEventListener('mute', () => {
       console.log('track muted', track);
-      el.parentNode.removeChild(el);
+      el.parentNode!.removeChild(el);
     });
     track.addEventListener('unmute', () => {
       console.log('track unmuted', track);
@@ -267,6 +267,10 @@ function App() {
       method: 'POST',
       mode: 'cors',
     });
+    const element = document.getElementById("media")!;
+    while (element.firstChild) {
+      element.removeChild(element.firstChild);
+    }
   }
 
   return (
