@@ -19,6 +19,7 @@ function App() {
   const streamCam = useRef(new MediaStream());
   const streamMic = useRef(new MediaStream());
   const medias = useRef(new Array<element>());
+  const callbackRef = useRef((value) => {});
 
   const [sessionDisabled, setSessionDisabled] = useState(false)
   const [joinDisabled, setJoinDisabled] = useState(false)
@@ -27,7 +28,6 @@ function App() {
   const [micDisabled, setMicDisabled] = useState(true)
   const [iceStatus, setIceStatus] = useState('Waiting')
   const [chanStatus, setChanStatus] = useState('Click Join Button...')
-  const [callback, setCallback] = useState( () => (value) => {})
   const [media, setMedia] = useState(new Array<element>());
 
   useEffect(() => {
@@ -35,16 +35,16 @@ function App() {
     setMedia(medias.current)
   }, [medias.current.length])
 
-  const messageCallback = useCallback((event: MessageEvent) => {
+  const messageCallback = (event: MessageEvent) => {
     const json = JSON.parse(event.data);
     if (json.type == 'offer') {
       // no callback probably means it's an offer
       handleOffer(event.data);
     } else if (json.type == 'answer') {
-      // setCallback(() => callback(event.data))
-      callback(event.data);
+      callbackRef.current(event.data)
+      callbackRef.current = (value) => {}
     }
-  }, [callback])
+  }
 
 
   const onIceConnectionStateChangeCallback = () => {
@@ -69,46 +69,73 @@ function App() {
     setChanStatus('Joined session ' + session + ' as endpoint ' + endpointId)
     setMicDisabled(false)
     setCamDisabled(false)
+    setLeaveDisabled(false)
     console.log('onOpenCallback', onOpenCallback)
   }
 
   const onTrackCallback = (e: { track: any; }) => {
-    console.log('ontrack', e.track);
-    const element: element = {
-      id: '',
-      width: 0,
-      controls: false,
-      autoplay: false,
-      srcObject: new MediaStream(),
-    }
-    const track = e.track
-    element.id = track.id
-    // if (byId(domId)) {
-    //   // we aleady have this track
-    //   return;
+    // console.log('ontrack', e.track);
+    // const element: element = {
+    //   id: '',
+    //   width: 0,
+    //   controls: false,
+    //   autoplay: false,
+    //   srcObject: new MediaStream(),
     // }
-    element.width = 500
-    element.controls = true
-    element.autoplay = true
-    setTimeout(() => {
-      const new_media = new MediaStream();
-      new_media.addTrack(track);
-      element.srcObject = new_media
-    }, 1);
-    // if (!medias.current.find((value)=>value.id === element.id)){
-    //   console.log("ADD MEDIA", element.id)
+    // const track = e.track
+    // element.id = track.id
+    // // if (byId(domId)) {
+    // //   // we aleady have this track
+    // //   return;
+    // // }
+    // element.width = 500
+    // element.controls = true
+    // element.autoplay = true
+    // setTimeout(() => {
+    //   const new_media = new MediaStream();
+    //   new_media.addTrack(track);
+    //   element.srcObject = new_media
+    // }, 1);
+    // // if (!medias.current.find((value)=>value.id === element.id)){
+    // //   console.log("ADD MEDIA", element.id)
+    // //   medias.current.push(element)
+    // //   setMedia(medias.current)
+    // // }
+    // track.addEventListener('mute', () => {
+    //   console.log('track muted', element);
+    //   medias.current = medias.current.filter((value)=>value.id === element.id)
+    //   setMedia(medias.current)
+    // })
+    // track.addEventListener('unmute', () => {
+    //   console.log('track unmuted', element);
     //   medias.current.push(element)
     //   setMedia(medias.current)
-    // }
+    // });
+    console.log('ontrack', e.track);
+    const track = e.track;
+    const domId = `media-${track.id}`;
+    const el = document.createElement('video');
+    if (document.getElementById(domId)) {
+      // we aleady have this track
+      return;
+    }
+    el.id = domId;
+    el.width = 500;
+    document.getElementById('media')!.appendChild(el);
+    el.controls = true;
+    el.autoplay = true;
+    setTimeout(() => {
+      const media = new MediaStream();
+      media.addTrack(track);
+      el.srcObject = media;
+    }, 1);
     track.addEventListener('mute', () => {
-      console.log('track muted', element);
-      medias.current = medias.current.filter((value)=>value.id === element.id)
-      setMedia(medias.current)
-    })
+      console.log('track muted', track);
+      el.parentNode.removeChild(el);
+    });
     track.addEventListener('unmute', () => {
-      console.log('track unmuted', element);
-      medias.current.push(element)
-      setMedia(medias.current)
+      console.log('track unmuted', track);
+      document.getElementById('media')!.appendChild(el);
     });
   }
 
@@ -119,7 +146,7 @@ function App() {
       await pc.current.setLocalDescription(offer);
       offerChannel.current.send(JSON.stringify(offer));
       const json = await new Promise((rs) => {
-        setCallback(() => rs)
+        callbackRef.current = rs
       });
       const answer = JSON.parse(json);
       console.log('received answer', answer.sdp.split('\r\n'));
@@ -213,15 +240,16 @@ function App() {
       // Send the offer to the server
       const response = await fetch(path, {
         method: 'POST',
-        mode: 'cors',
-        headers: {'Content-type': 'application/json'},
+        headers: {
+          'Content-type': 'application/json'
+        },
         body: JSON.stringify(offer),
       });
 
       const answer = await response.json();
 
       if (answer.sdp) {
-        await pc.current.setRemoteDescription(new RTCSessionDescription(answer));
+        await pc.current.setRemoteDescription(answer);
       }
     });
   }
@@ -249,7 +277,7 @@ function App() {
         }}></input>
       </label>
       <button id="join" onClick={startRtc} disabled={joinDisabled}>Join</button>
-      {/*<button id="leave" onClick={leaveRtc} disabled={leaveDisabled}>Leave</button>*/}
+      <button id="leave" onClick={leaveRtc} disabled={leaveDisabled}>Leave</button>
       <button id="cam" onClick={startCam} disabled={camDisabled}>Cam</button>
       <button id="mic" onClick={startMic} disabled={micDisabled}>Mic</button>
       Status: <span id="ice_status">{iceStatus}</span>
