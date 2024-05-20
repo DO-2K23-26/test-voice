@@ -45,6 +45,34 @@ function App() {
   const [chanStatus, setChanStatus] = useState("Click Join Button...");
   const [media, setMedia] = useState(new Array<element>());
 
+  const [micInputList, setMicInputList] = useState(
+    new Array<MediaDeviceInfo>()
+  );
+  const [camInputList, setCamInputList] = useState(
+    new Array<MediaDeviceInfo>()
+  );
+
+  const [selectedMic, setSelectedMic] = useState("");
+  const [selectedCam, setSelectedCam] = useState("");
+
+  useEffect(() => {
+    navigator.mediaDevices //ask for permission
+      .getUserMedia({
+        audio: true,
+        video: true,
+      })
+      .then(() => {
+        navigator.mediaDevices.enumerateDevices().then((devices) => {
+          setMicInputList(
+            devices.filter((device) => device.kind === "audioinput")
+          );
+          setCamInputList(
+            devices.filter((device) => device.kind === "videoinput")
+          );
+        });
+      });
+  }, []);
+
   useEffect(() => {
     console.log(medias.current);
     setMedia(medias.current);
@@ -199,8 +227,14 @@ function App() {
     setCamDisabled(true);
     streamCam.current = await navigator.mediaDevices.getUserMedia({
       video: {
+<<<<<<< HEAD
         width: 320,
         height: 240,
+=======
+        width: 640,
+        height: 360,
+        deviceId: selectedCam,
+>>>>>>> dcc01a8 (feat(device-picker): implemented device picker + added rules for pretiter)
       },
     });
     // medias.current.push({id: streamCam.current.id, width: 640, controls: true, autoplay: true, srcObject: streamCam.current });
@@ -236,7 +270,9 @@ function App() {
   async function startMic() {
     setMicDisabled(true)
     streamMic.current = await navigator.mediaDevices.getUserMedia({
-      audio: true,
+      audio: {
+        deviceId: selectedMic,
+      },
     });
     pc.current.addTransceiver(streamMic.current.getTracks()[0], {
       streams: [streamMic.current],
@@ -300,31 +336,61 @@ function App() {
   }
 
   return (
-    <>
-      <label>
-        Session:
-        <input
-          type="number"
-          id="session"
-          disabled={sessionDisabled}
-          value={session}
-          onInput={(event) => {
-            setSession(event.currentTarget.valueAsNumber);
-          }}
-        ></input>
-      </label>
-      <button id="join" onClick={startRtc} disabled={joinDisabled}>
-        Join
-      </button>
-      <button id="leave" onClick={leaveRtc} disabled={leaveDisabled}>
-        Leave
-      </button>
-      <button id="cam" onClick={startCam} disabled={camDisabled}>
-        Cam
-      </button>
-      <button id="mic" onClick={startMic} disabled={micDisabled}>
-        Mic
-      </button>
+    <div className="container">
+      <span>
+        <label>
+          Session:
+          <input
+            type="number"
+            id="session"
+            disabled={sessionDisabled}
+            value={session}
+            onInput={(event) => {
+              setSession(event.currentTarget.valueAsNumber);
+            }}
+          ></input>
+        </label>
+        <button id="join" onClick={startRtc} disabled={joinDisabled}>
+          Join
+        </button>
+        <button id="leave" onClick={leaveRtc} disabled={leaveDisabled}>
+          Leave
+        </button>
+      </span>
+      <span>
+        <select
+          id="mic_input"
+          onChange={(event) => setSelectedMic(event.currentTarget.value)}
+        >
+          {micInputList.map((value, index) => {
+            return (
+              <option key={index} value={value.deviceId}>
+                {value.label}
+              </option>
+            );
+          })}
+        </select>
+        <button id="mic" onClick={startMic} disabled={micDisabled}>
+          Mic
+        </button>
+        <hr></hr>
+
+        <select
+          id="cam_input"
+          onChange={(event) => setSelectedCam(event.currentTarget.value)}
+        >
+          {camInputList.map((value, index) => {
+            return (
+              <option key={index} value={value.deviceId}>
+                {value.label}
+              </option>
+            );
+          })}
+        </select>
+        <button id="cam" onClick={startCam} disabled={camDisabled}>
+          Cam
+        </button>
+      </span>
       Status: <span id="ice_status">{iceStatus}</span>
       <div id="chan_status">{chanStatus}</div>
       <div id="media">
@@ -333,8 +399,13 @@ function App() {
         {/*  return <VideoPlayer key={index} props={value} />*/}
         {/*})}*/}
       </div>
+<<<<<<< HEAD
     </>
   )
+=======
+    </div>
+  );
+>>>>>>> dcc01a8 (feat(device-picker): implemented device picker + added rules for pretiter)
 }
 
 export default App
