@@ -61,7 +61,8 @@ function App() {
         console.log(value);
       };
     }
-  };
+  }
+
 
   const onIceConnectionStateChangeCallback = () => {
     setIceStatus(pc.current.iceConnectionState);
@@ -77,10 +78,10 @@ function App() {
         streamMic.current.getTracks()[0]?.stop();
       }
       pc.current.close();
-      setJoinDisabled(true);
-      setLeaveDisabled(true);
-      setCamDisabled(true);
-      setMicDisabled(true);
+      setJoinDisabled(true)
+      setLeaveDisabled(true)
+      setCamDisabled(true)
+      setMicDisabled(true)
     }
   };
 
@@ -130,33 +131,36 @@ function App() {
     //   medias.current.push(element)
     //   setMedia(medias.current)
     // });
-    console.log("ontrack", e.track);
+    console.log('ontrack', e.track);
     const track = e.track;
     const domId = `media-${track.id}`;
-    const el = document.createElement("video");
+    const el = document.createElement('video');
     if (document.getElementById(domId)) {
       // we aleady have this track
       return;
     }
     el.id = domId;
     el.width = 500;
-    document.getElementById("media")!.appendChild(el);
+    document.getElementById('media')!.appendChild(el);
     el.controls = true;
     el.autoplay = true;
-    setTimeout(() => {
-      const media = new MediaStream();
-      media.addTrack(track);
-      el.srcObject = media;
-    }, 1);
-    track.addEventListener("mute", () => {
-      console.log("track muted", track);
+    const media = new MediaStream();
+    media.addTrack(track);
+    el.srcObject = media;
+    el.onloadedmetadata = () => console.log("unmuted workaround!");
+    track.addEventListener('mute', () => {
+      console.log('track muted', track);
+    });
+    track.addEventListener('unmute', () => {
+      console.log('track unmuted', track);
+      el.autoplay = true
+    });
+    track.addEventListener('ended', () => {
+      console.log('track ended', track);
       el.parentNode!.removeChild(el);
-    });
-    track.addEventListener("unmute", () => {
-      console.log("track unmuted", track);
-      document.getElementById("media")!.appendChild(el);
-    });
-  };
+    })
+  }
+
 
   async function negotiate() {
     pc.current.createOffer().then(async (offer) => {
@@ -173,7 +177,7 @@ function App() {
       } catch (error) {
         console.log("rtc.setRemoteDescription(answer) with error: ", error);
       }
-    });
+    })
   }
 
   async function handleOffer(json: string) {
@@ -195,8 +199,8 @@ function App() {
     setCamDisabled(true);
     streamCam.current = await navigator.mediaDevices.getUserMedia({
       video: {
-        width: 640,
-        height: 360,
+        width: 320,
+        height: 240,
       },
     });
     // medias.current.push({id: streamCam.current.id, width: 640, controls: true, autoplay: true, srcObject: streamCam.current });
@@ -230,7 +234,7 @@ function App() {
   }
 
   async function startMic() {
-    setMicDisabled(true);
+    setMicDisabled(true)
     streamMic.current = await navigator.mediaDevices.getUserMedia({
       audio: true,
     });
@@ -256,6 +260,7 @@ function App() {
     offerChannel.current.onopen = onOpenCallback;
 
     pc.current.createOffer().then(async (offer) => {
+
       await pc.current.setLocalDescription(offer);
 
       // Send the offer to the server
@@ -323,13 +328,13 @@ function App() {
       Status: <span id="ice_status">{iceStatus}</span>
       <div id="chan_status">{chanStatus}</div>
       <div id="media">
-        {media.map((value, index) => {
-          console.log("la video", value.srcObject);
-          return <VideoPlayer key={index} props={value} />;
-        })}
+        {/*{media.map((value,index) => {*/}
+        {/*  console.log("la video",value.srcObject)*/}
+        {/*  return <VideoPlayer key={index} props={value} />*/}
+        {/*})}*/}
       </div>
     </>
-  );
+  )
 }
 
-export default App;
+export default App
