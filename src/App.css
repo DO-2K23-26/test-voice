@@ -5,6 +5,30 @@
   text-align: center;
 }
 
+.container{
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.container span {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.container span button {
+  margin-left: 10px;
+  margin-right: 10px;
+}
+
+.container span input {
+  margin-right: 50px;
+  margin-left: 10px;
+}
+
 .logo {
   height: 6em;
   padding: 1.5em;
