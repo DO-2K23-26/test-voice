@@ -40,6 +40,7 @@ function App() {
   const [micDisabled, setMicDisabled] = useState(true)
   const [iceStatus, setIceStatus] = useState('Waiting')
   const [chanStatus, setChanStatus] = useState('Click Join Button...')
+  const [speaking, setSpeaking] = useState(false)
   // const [media, setMedia] = useState(new Array<element>())
 
   const [micInputList, setMicInputList] = useState(new Array<MediaDeviceInfo>())
@@ -113,6 +114,38 @@ function App() {
     console.log('onOpenCallback', onOpenCallback)
   }
 
+  const checkSpeaking = (source: MediaStream, threshold: number) => {
+    const audioContext = new AudioContext()
+    const analyser = audioContext.createAnalyser()
+    const microphone = audioContext.createMediaStreamSource(source)
+    const javascriptNode = audioContext.createScriptProcessor(2048, 1, 1)
+
+    analyser.smoothingTimeConstant = 0.8
+    analyser.fftSize = 1024
+
+    microphone.connect(analyser)
+    analyser.connect(javascriptNode)
+    javascriptNode.connect(audioContext.destination)
+
+    javascriptNode.onaudioprocess = () => {
+      const array = new Uint8Array(analyser.frequencyBinCount)
+      analyser.getByteFrequencyData(array)
+      let values = 0
+
+      const length = array.length
+      for (let i = 0; i < length; i++) {
+        values += array[i]
+      }
+
+      const average = values / length
+      if (average > threshold) {
+        setSpeaking(true)
+      } else {
+        setSpeaking(false)
+      }
+    }
+  }
+
   const onTrackCallback = (e: RTCTrackEvent) => {
     // console.log('ontrack', e.track);
     // const element: element = {
@@ -167,6 +200,10 @@ function App() {
     const media = new MediaStream()
     media.addTrack(track)
     el.srcObject = media
+    if (track.kind === 'audio') {
+      checkSpeaking(media, 30)
+      el.hidden = true
+    }
     el.onloadedmetadata = () => console.log('unmuted workaround!')
     track.addEventListener('mute', () => {
       console.log('track muted', track)
@@ -379,6 +416,7 @@ function App() {
       Status: <span id="ice_status">{iceStatus}</span>
       <div id="chan_status">{chanStatus}</div>
       <div id="media"></div>
+      <p>{speaking ? 'Speaking' : 'Silent'}</p>
     </div>
   )
 }
