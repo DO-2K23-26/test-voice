@@ -1,6 +1,9 @@
 # Start with a base image containing Node.js runtime
 FROM node:lts-alpine as build-stage
 
+ARG VITE_API_ENDPOINT
+ENV VITE_API_ENDPOINT $VITE_API_ENDPOINT
+
 # Set the working directory in the container to /app
 WORKDIR /app
 
